@@ -14,7 +14,7 @@ def create_new_table(name):
 
 if __name__ == "__main__":
     # connecting to the database
-    connection = sqlite3.connect("testTable.db")
+    connection = sqlite3.connect("songTable.db")
     # cursor
     curse = connection.cursor()
 
