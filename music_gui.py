@@ -206,7 +206,7 @@ class Admin():
         entry2 = Entry(master, font=('Arial', 25))
         entry3 = Entry(master, font=('Arial', 25))
         entry4 = Entry(master, font=('Arial', 25))
-        b1 = Button(master, text='Insert new artist', width=20, height=5, padx=10, pady=10, font=('Arial', 15),
+        b1 = Button(master, text='Insert new album', width=20, height=5, padx=10, pady=10, font=('Arial', 15),
                     command=lambda: self.run_album(entry1.get(),entry2,entry3.get(),entry4.get()))
         label1.grid(row=0, column=0, padx=10, pady=10, columnspan=10)
         label2.grid(row=1, column=0, padx=10, pady=10)
