@@ -23,6 +23,15 @@ queries = [
     """insert into album values(?,?,?,?,(select count(*) from album)+1)""",  # Query 9
     """select al_name from album where al_album_id = ? and al_artist_id = ?""",  # Query 10
     """insert into song values(?,(select count(*) from song)+1,?,?,?,?)""",  # Query 11
+    """select s_name as Name, a_name as Artist,s_song_length as Length, al_name as Album,s_times_played as Plays, s_song_id as SongID from song, artist, album
+    where s_artist_id = a_artist_id and s_album_id = al_album_id and s_name like ? order by Name desc""",  # Query 12
+    """select a_name as Artist, s_name as Name, s_song_length as Length, al_name as Album,s_times_played as Plays, s_song_id as SongID from song, artist, album
+    where s_artist_id = a_artist_id and s_album_id = al_album_id and a_name like ? order by Artist desc""",  # Query 13
+    """select al_name as Album, s_name as Name, a_name as Artist, s_song_length as Length, s_times_played as Plays, s_song_id as SongID from song, artist, album
+    where s_artist_id = a_artist_id and s_album_id = al_album_id and al_name like ? order by Album desc""",  # Query 14
+    """insert into user values(?,(select count(*) from user)+1)""",  # Query 15
+    """select u_name from user where u_name = ? and u_user_id = ?""",  # Query 16
+    """select max(u_user_id) from user""",  # Query 17
 ]
 
 
@@ -272,28 +281,147 @@ class User():
         self.master.geometry("1600x600")
         self.nb = ttk.Notebook(master)
         self.create_ui()
+        self.user_id=0
 
     def create_ui(self):
         self.nb.grid(row=1, column=0, columnspan=50, rowspan=49, sticky='NESW')
         page1 = ttk.Frame(self.nb)
         self.nb.add(page1, text='Home')
         page2 = ttk.Frame(self.nb)
-        self.nb.add(page2, text='Search for songs')
+        self.nb.add(page2, text='Search by song')
         page3 = ttk.Frame(self.nb)
-        self.nb.add(page3, text='Find new songs')
+        self.nb.add(page3, text='Search by album')
         page4 = ttk.Frame(self.nb)
-        self.nb.add(page4, text='Manage playlist')
-        self.tree = ttk.Treeview(page1,columns=('Name', 'Song Id', 'Artist Id', 'Song length', 'Times Played'),height=20)
-        self.tree.heading('#0', text='Song name')
-        self.tree.heading('#1', text='song_id')
-        self.tree.heading('#2', text='artist id')
-        self.tree.heading('#3', text='song_length')
-        self.tree.heading('#4', text='Times played')
-        self.tree.heading('#5', text='Album')
-        self.tree.grid(row=0, column=0, columnspan=6, sticky='nsew')
-        ttk.Button(page1, text='Delete song').grid(row=5, column=0)
-        ttk.Button(page1, text='Edit song').grid(row=5, column=1)
-        self.viewing_records()
+        self.nb.add(page4, text='Search by artist')
+        page5 = ttk.Frame(self.nb)
+        self.nb.add(page5, text='Find new songs')
+        page6 = ttk.Frame(self.nb)
+        self.nb.add(page6, text='Manage playlist')
+        self.user_login(page1)
+        self.search_song(page2)
+        self.search_album(page3)
+        self.search_artist(page4)
+
+    def user_login(self,master):
+        label1 = Label(master, text='Login Screen', font=('Arial', 45))
+        label2 = Label(master, text='Name of User', font=('Arial', 15))
+        label3 = Label(master, text='User ID', font=('Arial', 15))
+        label4 = Label(master, text='New User Name', font=('Arial', 15))
+        entry1 = Entry(master, font=('Arial', 15))
+        entry2 = Entry(master, font=('Arial', 15))
+        entry3 = Entry(master, font=('Arial', 15))
+        b1 = Button(master, text='Login', padx=10, pady=10, font=('Arial', 15),
+                    command=lambda: self.login(entry1,entry2))
+        b2 = Button(master, text='Create User', padx=10, pady=10, font=('Arial', 15),
+                    command=lambda: self.create_new_user(entry3,master))
+        label1.grid(row=0, column=1, padx=5, pady=5,columnspan=4)
+        label2.grid(row=1, column=0, padx=5, pady=5)
+        label3.grid(row=2, column=0, padx=5, pady=5)
+        label4.grid(row=1, column=2, padx=5, pady=5)
+        entry1.grid(row=1, column=1, padx=5, pady=5)
+        entry2.grid(row=2, column=1, padx=5, pady=5)
+        entry3.grid(row=1, column=3, padx=5, pady=5)
+        b1.grid(row=3, column=1)
+        b2.grid(row=3,column=3)
+
+    def create_new_user(self,user_name,master):
+        if len(user_name.get())!=0:
+            db_rows = self.run_query(queries[15], [user_name.get()])
+            print("User added!")
+            db_row = self.run_query(queries[17])
+            new_id = 0
+            for row in db_row:
+                new_id=row[0]
+            label = Label(master, text='Created! ID is :' + str(new_id), font=('Arial', 15))
+            label.grid(row=2, column=3, padx=5, pady=5)
+            self.master.wm_title('User: '+user_name.get())
+            self.user_id = new_id
+        else:
+            user_name.delete(0, END)
+            user_name.insert(0, 'Invalid')
+
+    def login(self,name,id):
+        db_rows = self.run_query(queries[16], [name.get(),id.get()])
+        count = 0
+        for row in db_rows:
+            count = count + 1
+        if count == 0:
+            name.delete(0, END)
+            name.insert(0, 'Invalid')
+            id.delete(0, END)
+            id.insert(0, 'Invalid')
+        else:
+            self.master.wm_title('User: ' + name.get())
+            self.user_id = id
+            print("Logged in")
+
+
+    def search_song(self,master):
+        label1 = Label(master, text='Enter a search term', font=('Arial', 15))
+        entry1 = Entry(master, font=('Arial', 15))
+        b1 = Button(master, text='Search', padx=10, pady=10, font=('Arial', 15),
+                    command=lambda: self.run_search(tree,entry1.get(),12))
+        label1.grid(row=0, column=0, padx=5, pady=5)
+        entry1.grid(row=0, column=1, padx=5, pady=5)
+        b1.grid(row=0, column=2, columnspan=10)
+        tree = ttk.Treeview(master, columns=('Name', 'Song Id', 'Artist Id', 'Song length', 'Times Played'),
+                                  height=20)
+        tree.heading('#0', text='Song name')
+        tree.heading('#1', text='Artist Name')
+        tree.heading('#2', text='Song Length')
+        tree.heading('#3', text='Album')
+        tree.heading('#4', text='Times Played')
+        tree.heading('#5', text='Song ID')
+        tree.grid(row=2, column=0, columnspan=6, sticky='nsew')
+        self.run_search(tree,"",12)
+
+    def search_album(self,master):
+        label1 = Label(master, text='Enter a search term', font=('Arial', 15))
+        entry1 = Entry(master, font=('Arial', 15))
+        b1 = Button(master, text='Search', padx=10, pady=10, font=('Arial', 15),
+                    command=lambda: self.run_search(tree,entry1.get(),14))
+        label1.grid(row=0, column=0, padx=5, pady=5)
+        entry1.grid(row=0, column=1, padx=5, pady=5)
+        b1.grid(row=0, column=2, columnspan=10)
+        tree = ttk.Treeview(master, columns=('Name', 'Song Id', 'Artist Id', 'Song length', 'Times Played'),
+                                  height=20)
+        tree.heading('#0', text='Album Name')
+        tree.heading('#1', text='Song Name')
+        tree.heading('#2', text='Artist Name')
+        tree.heading('#3', text='Song Length')
+        tree.heading('#4', text='Times Played')
+        tree.heading('#5', text='Song ID')
+        tree.grid(row=2, column=0, columnspan=6, sticky='nsew')
+        self.run_search(tree,"",14)
+
+    def search_artist(self,master):
+        label1 = Label(master, text='Enter a search term', font=('Arial', 15))
+        entry1 = Entry(master, font=('Arial', 15))
+        b1 = Button(master, text='Search', padx=10, pady=10, font=('Arial', 15),
+                    command=lambda: self.run_search(tree,entry1.get(),13))
+        label1.grid(row=0, column=0, padx=5, pady=5)
+        entry1.grid(row=0, column=1, padx=5, pady=5)
+        b1.grid(row=0, column=2, columnspan=10)
+        tree = ttk.Treeview(master, columns=('Name', 'Song Id', 'Artist Id', 'Song length', 'Times Played'),
+                                  height=20)
+        tree.heading('#0', text='Song name')
+        tree.heading('#1', text='Artist Name')
+        tree.heading('#2', text='Song Length')
+        tree.heading('#3', text='Album')
+        tree.heading('#4', text='Times Played')
+        tree.heading('#5', text='Song ID')
+        tree.grid(row=2, column=0, columnspan=6, sticky='nsew')
+        self.run_search(tree,"",13)
+
+    def run_search(self,tree,name,number):
+        name = "%"+name+"%"
+        records = tree.get_children()
+        for element in records:
+            tree.delete(element)
+        query = queries[number]
+        db_rows = self.run_query(query,[name])
+        for row in db_rows:
+            tree.insert('', 0, text=row[0], values=row[1:])
 
     def run_query(self, query, parameters=()):
         with self.conn:
@@ -315,6 +443,8 @@ def main():
     database = "mixer.db"
     master = Tk()
     master.title('Music Mixer')
+    s = ttk.Style()
+    s.theme_use('clam')
     start = StartMenu(master,database)
     master.resizable(False, False)
     master.mainloop()
