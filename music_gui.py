@@ -32,6 +32,22 @@ queries = [
     """insert into user values(?,(select count(*) from user)+1)""",  # Query 15
     """select u_name from user where u_name = ? and u_user_id = ?""",  # Query 16
     """select max(u_user_id) from user""",  # Query 17
+    """select* from(select s_name as Name, a_name as Artist,s_song_length as Length, al_name as Album, al_genre as genre,s_times_played as Plays, s_song_id as SongID from song, artist, album
+    where s_artist_id = a_artist_id and s_album_id = al_album_id and al_genre like ? order by s_times_played desc limit 50)order by Plays""",  # Query 18
+    """select p_playlist_id, p_name, u_name from user, playlist,user_playlists where 
+    up_playlist_id = p_playlist_id and u_user_id = up_user_id and p_name like ? order by p_playlist_id desc""",  # Query 19
+    """select p_name, s_name, a_name from playlist, playlist_songs,song, artist where s_artist_id = a_artist_id and 
+    s_song_id = ps_song_id and ps_playlist_id = p_playlist_id and p_playlist_id = ?""",  # Query 20
+    """select p_name from playlist where p_playlist_id = ?""",  # Query 21
+    """select up_user_id from user_playlists where up_playlist_id  = ? and up_user_id = ?""",  # Query 22
+    """insert into user_playlists values(?,?)""",  # Query 23
+    """select p_name from playlist where p_playlist_id = ?""", # Query 24
+    """insert into playlist values(?,(select count(*) from playlist)+1)""",  # Query 25
+    """insert into user_playlists values(?,(select count(*)from playlist));""",  # Query 26
+    """select max(p_playlist_id) from playlist""",  # Query 27
+    """insert into playlist_songs values(?,?)""",  # Query 28
+    """delete from playlist_songs where ps_playlist_id = ? and ps_song_id = ?""",  # Query 29
+    """select ps_song_id from playlist_songs where ps_song_id = ?""",  # Query 30
 ]
 
 
@@ -278,10 +294,14 @@ class User():
     def __init__(self, master, conn):
         self.master = master
         self.conn = conn
-        self.master.geometry("1600x600")
+        self.master.geometry("1400x550")
         self.nb = ttk.Notebook(master)
         self.create_ui()
-        self.user_id=0
+        self.user_id=-1
+        self.user_name = 0
+        self.playlist_name = ""
+        self.playlist_id = -1
+        self.change_play = False
 
     def create_ui(self):
         self.nb.grid(row=1, column=0, columnspan=50, rowspan=49, sticky='NESW')
@@ -294,13 +314,18 @@ class User():
         page4 = ttk.Frame(self.nb)
         self.nb.add(page4, text='Search by artist')
         page5 = ttk.Frame(self.nb)
-        self.nb.add(page5, text='Find new songs')
+        self.nb.add(page5, text='Find popular songs per genre')
         page6 = ttk.Frame(self.nb)
-        self.nb.add(page6, text='Manage playlist')
+        self.nb.add(page6, text='See playlists')
+        page7 = ttk.Frame(self.nb)
+        self.nb.add(page7, text='Manage Playlists')
         self.user_login(page1)
         self.search_song(page2)
         self.search_album(page3)
         self.search_artist(page4)
+        self.find_songs(page5)
+        self.look_at_playlists(page6)
+        self.manage_playlists(page7)
 
     def user_login(self,master):
         label1 = Label(master, text='Login Screen', font=('Arial', 45))
@@ -336,6 +361,7 @@ class User():
             label.grid(row=2, column=3, padx=5, pady=5)
             self.master.wm_title('User: '+user_name.get())
             self.user_id = new_id
+            self.user_name = user_name.get()
         else:
             user_name.delete(0, END)
             user_name.insert(0, 'Invalid')
@@ -353,6 +379,7 @@ class User():
         else:
             self.master.wm_title('User: ' + name.get())
             self.user_id = id
+            self.user_name = name.get()
             print("Logged in")
 
 
@@ -404,8 +431,8 @@ class User():
         b1.grid(row=0, column=2, columnspan=10)
         tree = ttk.Treeview(master, columns=('Name', 'Song Id', 'Artist Id', 'Song length', 'Times Played'),
                                   height=20)
-        tree.heading('#0', text='Song name')
-        tree.heading('#1', text='Artist Name')
+        tree.heading('#0', text='Artist name')
+        tree.heading('#1', text='Song Name')
         tree.heading('#2', text='Song Length')
         tree.heading('#3', text='Album')
         tree.heading('#4', text='Times Played')
@@ -430,14 +457,207 @@ class User():
             self.conn.commit()
         return query_result
 
-    def viewing_records(self):
-        records = self.tree.get_children()
-        for element in records:
-            self.tree.delete(element)
-        query = queries[1]
-        db_rows = self.run_query(query)
+    def find_songs(self,master):
+        label1 = Label(master, text='Search most played by genre', font=('Arial', 15))
+        entry1 = Entry(master, font=('Arial', 15))
+        b1 = Button(master, text='Search', padx=10, pady=10, font=('Arial', 15),
+                    command=lambda: self.run_search(tree, entry1.get(), 18))
+        label1.grid(row=0, column=0, padx=5, pady=5)
+        entry1.grid(row=0, column=1, padx=5, pady=5)
+        b1.grid(row=0, column=2, columnspan=10)
+        tree = ttk.Treeview(master, columns=('Name', 'Song Id', 'Artist Id', 'Song length', 'Times Played','Filler'),
+                            height=20)
+        tree.heading('#0', text='Song name')
+        tree.heading('#1', text='Artist Name')
+        tree.heading('#2', text='Song Length')
+        tree.heading('#3', text='Album')
+        tree.heading('#4', text='Genre')
+        tree.heading('#5', text='Times Played')
+        tree.heading('#6', text='Song ID')
+        tree.grid(row=2, column=0, columnspan=6, sticky='nsew')
+        self.run_search(tree, "", 18)
+
+    def look_at_playlists(self,master):
+        label1 = Label(master, text='Enter a playlist id', font=('Arial', 15))
+        label2 = Label(master, text ='List of Playlists', font=('Arial', 15))
+        entry1 = Entry(master, font=('Arial', 15))
+        b1 = Button(master, text='Find Songs', padx=10, pady=10, font=('Arial', 15),
+                    command=lambda: self.find_playlist(entry1,tree2))
+        label1.grid(row=0, column=2, padx=5, pady=5)
+        label2.grid(row=0, column=10, padx=5, pady=5)
+        entry1.grid(row=0, column=5, padx=5, pady=5)
+        b1.grid(row=0, column=6)
+        tree = ttk.Treeview(master, columns=('Name', 'Song Id'),
+                            height=20)
+        tree.heading('#0', text='Playlist ID')
+        tree.heading('#1', text='Playlist Name')
+        tree.heading('#2', text='User name')
+        tree.grid(row=2,column=10 , sticky='nsew')
+        self.run_search(tree, "", 19)
+        tree2 = ttk.Treeview(master, columns=('Name', 'Song Id'),
+                            height=20)
+        tree2.heading('#0', text='Playlist Name')
+        tree2.heading('#1', text='Song Name')
+        tree2.heading('#2', text='Artist')
+        tree2.grid(row=2,column=0, columnspan =10, sticky='nsew')
+
+    def find_playlist(self,id,tree):
+        db_rows = self.run_query(queries[21], [id.get()])
+        count = 0
         for row in db_rows:
-            self.tree.insert('', 0, text=row[0], values=row[1:])
+            count = count + 1
+        if count == 0:
+            id.delete(0, END)
+            id.insert(0, 'Invalid')
+        else:
+            records = tree.get_children()
+            for element in records:
+                tree.delete(element)
+            query = queries[20]
+            db_rows = self.run_query(query, [id.get()])
+            for row in db_rows:
+                tree.insert('', 0, text=row[0], values=row[1:])
+
+    def manage_playlists(self,master):
+        label1 = Label(master, text='Import Playlist ID', font=('Arial', 15))
+        label2 = Label(master, text='Playlist', font=('Arial', 15))
+        label3 = Label(master, text='Add song', font=('Arial', 15))
+        label4 = Label(master, text='Delete song', font=('Arial', 15))
+        label5 = Label(master, text='New Playlist Name', font=('Arial', 15))
+        entry1 = Entry(master, font=('Arial', 15))
+        entry2 = Entry(master, font=('Arial', 15))
+        entry3 = Entry(master, font=('Arial', 15))
+        entry4 = Entry(master, font=('Arial', 15))
+        b1 = Button(master, text='Import', padx=10, pady=10, font=('Arial', 15),
+                    command= lambda: self.import_playlist(entry1,tree,label2))
+        b2 = Button(master, text='Create New Playlist', padx=10, pady=10, font=('Arial', 15),
+                    command=lambda: self.create_playlist(entry4,label2,tree))
+        b3 = Button(master, text='ADD', padx=10, pady=10, font=('Arial', 15),
+                    command=lambda: self.new_playlist_song(entry2,tree))
+        b4 = Button(master, text='DELETE', padx=10, pady=10, font=('Arial', 15),
+                    command=lambda: self.remove_playlist_song(entry3,tree))
+        label5.grid(row=0, column=2, padx=5, pady=5)
+        label1.grid(row=1, column=2, padx=5, pady=5)
+        label2.grid(row=0, column=10, padx=5, pady=5)
+        label3.grid(row=2, column=2, padx=5, pady=5)
+        label4.grid(row=4, column=2, padx=5, pady=5)
+        entry1.grid(row=1, column=5, padx=5, pady=5)
+        entry2.grid(row=2, column=5, padx=5, pady=5)
+        entry3.grid(row=4, column=5, padx=5, pady=5)
+        entry4.grid(row=0, column=5, padx=5, pady=5)
+        b1.grid(row=1, column=6)
+        b2.grid(row=0, column=6)
+        b3.grid(row=2, column=6)
+        b4.grid(row=4, column=6)
+        tree = ttk.Treeview(master, columns=('Name', 'Song Id'),
+                            height=20)
+        tree.heading('#0', text='Playlist Name')
+        tree.heading('#1', text='Song Name')
+        tree.heading('#2', text='Artist')
+        tree.grid(row=1, column=10, rowspan=11, sticky='nsew')
+
+    def import_playlist(self,id,tree,label):
+        db_rows = self.run_query(queries[21], [id.get()])
+        count = 0
+        for row in db_rows:
+            count = count + 1
+        if count == 0:
+            id.delete(0, END)
+            id.insert(0, 'Invalid')
+        elif self.user_id == -1:
+            id.delete(0, END)
+            id.insert(0, 'Login to create playlists')
+        else:
+            self.change_play = True
+            db_rows = self.run_query(queries[22], [id.get(), str(self.user_id)])
+            for row in db_rows:
+                count = count + 1
+            if count == 0:
+                db_rows = self.run_query(queries[23], [str(self.user_id), id.get()])
+            db_rows = self.run_query(queries[24], [id.get()])
+            for row in db_rows:
+                self.playlist_name = row[0]
+            self.playlist_id = id.get()
+            records = tree.get_children()
+            for element in records:
+                tree.delete(element)
+            query = queries[20]
+            db_rows = self.run_query(query, [id.get()])
+            for row in db_rows:
+                tree.insert('', 0, text=row[0], values=row[1:])
+            self.update_label(label)
+
+    def create_playlist(self,name,label,tree):
+        if self.user_id == -1:
+            name.delete(0, END)
+            name.insert(0, 'Login to create playlists')
+        elif len(name.get())!=0:
+            db_rows = self.run_query(queries[25], [name.get()])
+            db_rows = self.run_query(queries[26], [str(self.user_id)])
+            self.playlist_name = name.get()
+            self.update_label(label)
+            db_rows = self.run_query(queries[27])
+            for row in db_rows:
+                self.playlist_id = row[0]
+            print("Playlist created!")
+            records = tree.get_children()
+            for element in records:
+                tree.delete(element)
+            query = queries[20]
+            db_rows = self.run_query(query, [self.playlist_id])
+            for row in db_rows:
+                tree.insert('', 0, text=row[0], values=row[1:])
+
+
+    def new_playlist_song(self,id,tree):
+        if self.user_id == -1:
+            id.delete(0, END)
+            id.insert(0, 'Login to create playlists')
+        else:
+            db_rows = self.run_query(queries[3], [id.get()])
+            count= 0
+            for row in db_rows:
+                count = count + 1
+            if count == 0:
+                id.delete(0, END)
+                id.insert(0, 'Invalid Song ID')
+            else:
+                db_rows = self.run_query(queries[28], [self.playlist_id,id.get()])
+                records = tree.get_children()
+                for element in records:
+                    tree.delete(element)
+                query = queries[20]
+                db_rows = self.run_query(query, [self.playlist_id])
+                for row in db_rows:
+                    tree.insert('', 0, text=row[0], values=row[1:])
+                
+
+    def remove_playlist_song(self,id,tree):
+        if self.user_id == -1:
+            id.delete(0, END)
+            id.insert(0, 'Login to create playlists')
+        else:
+            db_rows = self.run_query(queries[30], [id.get()])
+            count = 0
+            for row in db_rows:
+                count = count + 1
+            if count == 0:
+                id.delete(0, END)
+                id.insert(0, 'Invalid Song ID')
+            else:
+                db_rows = self.run_query(queries[29], [self.playlist_id, id.get()])
+                records = tree.get_children()
+                for element in records:
+                    tree.delete(element)
+                query = queries[20]
+                db_rows = self.run_query(query, [self.playlist_id])
+                for row in db_rows:
+                    tree.insert('', 0, text=row[0], values=row[1:])
+
+    def update_label(self,label):
+        print(self.playlist_name)
+        print(self.user_name)
+        label['text'] = "\"" + self.playlist_name +"\" by "+ self.user_name
 
 def main():
     database = "mixer.db"
